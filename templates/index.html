@@ -41,62 +41,93 @@
     <p id="feedback"></p>
     <p id="continuePrompt"></p>
     <button id="continuePractice" style="display:none;" disabled>Continue Practice</button>
+<script>
+    function isIOS() {
+        return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    }
 
-    <script>
-        function startPractice() {
-            fetch('/get_word')
-                .then(response => response.json())
-                .then(data => {
-                    const word = data.word;
-                    document.getElementById('wordPrompt').textContent = 'Spell the word:'; // Display prompt only
+    async function recordAndSendAudio(word) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        const audioChunks = [];
 
-                    // Use TTS to say the word
-                    const wordUtterance = new SpeechSynthesisUtterance(word);
-                    window.speechSynthesis.speak(wordUtterance);
+        mediaRecorder.ondataavailable = event => {
+            audioChunks.push(event.data);
+        };
 
-                    // Start countdown after TTS ends
-                    wordUtterance.onend = () => {
-                        startCountdown(3, () => {
-                            // Speech recognition for user's response
+        mediaRecorder.onstop = async () => {
+            const blob = new Blob(audioChunks, { type: 'audio/webm' });
+            const formData = new FormData();
+            formData.append('audio', blob, 'recording.webm');
+
+            const response = await fetch('/transcribe', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+            const userSpelling = data.transcription;
+
+            handleResponse(word, userSpelling);
+        };
+
+        mediaRecorder.start();
+        setTimeout(() => {
+            mediaRecorder.stop();
+        }, 3000);
+    }
+
+    function handleResponse(word, userSpelling) {
+        document.getElementById('userResponse').textContent = 'You spelled: ' + userSpelling;
+
+        const normalizedUserSpelling = userSpelling.replace(/\s+/g, '').trim().toLowerCase().normalize("NFC");
+        const normalizedWord = word.replace(/\s+/g, '').toLowerCase();
+
+        let feedbackText;
+        if (normalizedUserSpelling === normalizedWord) {
+            feedbackText = 'Correct! It’s ' + word;
+            document.getElementById('feedback').textContent = feedbackText;
+            const feedbackUtterance = new SpeechSynthesisUtterance(feedbackText);
+            feedbackUtterance.onend = enableContinueButton;
+            window.speechSynthesis.speak(feedbackUtterance);
+        } else {
+            feedbackText = 'Incorrect. The correct spelling is ';
+            document.getElementById('feedback').textContent = feedbackText + word;
+            spellOutAndSayWord(word, enableContinueButton);
+        }
+
+        document.getElementById('continuePrompt').textContent = 'Would you like to continue the practice?';
+        document.getElementById('continuePractice').style.display = 'inline';
+        document.getElementById('continuePractice').disabled = true;
+    }
+
+    function startPractice() {
+        fetch('/get_word')
+            .then(response => response.json())
+            .then(data => {
+                const word = data.word;
+                document.getElementById('wordPrompt').textContent = 'Spell the word:';
+                const wordUtterance = new SpeechSynthesisUtterance(word);
+                window.speechSynthesis.speak(wordUtterance);
+
+                wordUtterance.onend = () => {
+                    startCountdown(3, () => {
+                        document.getElementById('countdown').textContent = 'Please speak now!';
+                        if (isIOS()) {
+                            recordAndSendAudio(word);
+                        } else {
                             const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
                             recognition.lang = 'en-US';
                             recognition.interimResults = false;
-                            recognition.maxAlternatives = 1;                           
-     // Display a message to prompt the user to speak
-                            document.getElementById('countdown').textContent = 'Please speak now!';
+                            recognition.maxAlternatives = 1;
 
                             recognition.start();
 
-                                recognition.onresult = (event) => {
+                            recognition.onresult = (event) => {
                                 const userSpelling = event.results[0][0].transcript;
-                                document.getElementById('userResponse').textContent = 'You spelled: ' + userSpelling;
-
-                                // Normalize and compare spelling
-                                const normalizedUserSpelling = userSpelling.replace(/\s+/g, '').trim().toLowerCase().normalize("NFC");
-                                const normalizedWord = word.replace(/\s+/g, '').toLowerCase();
-
-                                let feedbackText;
-                                if (normalizedUserSpelling === normalizedWord) {
-                                    feedbackText = 'Correct! Its '+ word;
-                                    document.getElementById('feedback').textContent = feedbackText
-                                    const feedbackUtterance = new SpeechSynthesisUtterance(feedbackText);
-                                    feedbackUtterance.onend = enableContinueButton;
-                                    window.speechSynthesis.speak(feedbackUtterance);
-                                } else {
-                                    feedbackText = 'Incorrect. The correct spelling is ';
-                                    document.getElementById('feedback').textContent = feedbackText + word;
-
-                                    // Spell out each letter, then say the word
-                                    spellOutAndSayWord(word, enableContinueButton);
-                                }
-
-                                // Ask if the user wants to continue
-                                document.getElementById('continuePrompt').textContent = 'Would you like to continue the practice?';
-                                document.getElementById('continuePractice').style.display = 'inline';
-                                document.getElementById('continuePractice').disabled = true; // Initially disable
+                                handleResponse(word, userSpelling);
                             };
 
-                            // Stop recognition when speech ends
                             recognition.onspeechend = () => {
                                 recognition.stop();
                             };
@@ -104,84 +135,76 @@
                             recognition.onerror = (event) => {
                                 document.getElementById('feedback').textContent = 'Error occurred in recognition: ' + event.error;
                             };
-                        });
-                    };
-                });
-        }
-
-        // Function to spell out each letter of the word, then say the whole word
-        function spellOutAndSayWord(word, callback) {
-            const letters = word.split('');
-            const utteranceQueue = [];
-
-            // Create a TTS utterance for each letter
-            letters.forEach(letter => {
-                utteranceQueue.push(new SpeechSynthesisUtterance(letter));
+                        }
+                    });
+                };
             });
+    }
 
-            // Create a TTS utterance for the whole word
-            const wordUtterance = new SpeechSynthesisUtterance('The word is ' + word);
-            utteranceQueue.push(wordUtterance);
+    function spellOutAndSayWord(word, callback) {
+        const letters = word.split('');
+        const utteranceQueue = [];
 
-            // Speak each utterance in sequence
-            let currentIndex = 0;
-            const speakNext = () => {
-                if (currentIndex < utteranceQueue.length) {
-                    const utterance = utteranceQueue[currentIndex];
-                    window.speechSynthesis.speak(utterance);
-                    utterance.onend = () => {
-                        currentIndex++;
-                        speakNext();
-                    };
-                } else {
-                    callback(); // Callback after all utterances have been spoken
-                }
-            };
-            speakNext();
-        }
-
-        // Function to enable the Continue Practice button
-        function enableContinueButton() {
-            document.getElementById('continuePractice').disabled = false;
-        }
-
-        // Countdown function
-        function startCountdown(seconds, callback) {
-            const countdownElement = document.getElementById('countdown');
-            let counter = seconds;
-
-            const countdownInterval = setInterval(() => {
-                countdownElement.textContent = 'Starting in: ' + counter;
-                counter--;
-
-                if (counter < 0) {
-                    clearInterval(countdownInterval);
-                    countdownElement.textContent = ''; // Clear countdown
-                    callback(); // Call the callback function to start recognition
-                }
-            }, 1000);
-        }
-
-        document.getElementById('startPractice').addEventListener('click', function() {
-            document.getElementById('continuePrompt').textContent = '';
-            document.getElementById('continuePractice').style.display = 'none';
-            document.getElementById('userResponse').textContent = ''; // Clear previous response
-            document.getElementById('feedback').textContent = ''; // Clear previous feedback
-            startPractice();
+        letters.forEach(letter => {
+            utteranceQueue.push(new SpeechSynthesisUtterance(letter));
         });
 
-        document.getElementById('continuePractice').addEventListener('click', function() {
-            document.getElementById('continuePrompt').textContent = '';
-            document.getElementById('continuePractice').style.display = 'none';
-            document.getElementById('userResponse').textContent = ''; // Clear previous response
-            document.getElementById('feedback').textContent = ''; // Clear previous feedback
-            startPractice();
-        });
+        const wordUtterance = new SpeechSynthesisUtterance('The word is ' + word);
+        utteranceQueue.push(wordUtterance);
 
-               
+        let currentIndex = 0;
+        const speakNext = () => {
+            if (currentIndex < utteranceQueue.length) {
+                const utterance = utteranceQueue[currentIndex];
+                window.speechSynthesis.speak(utterance);
+                utterance.onend = () => {
+                    currentIndex++;
+                    speakNext();
+                };
+            } else {
+                callback();
+            }
+        };
+        speakNext();
+    }
 
+    function startCountdown(seconds, callback) {
+        const countdownElement = document.getElementById('countdown');
+        let counter = seconds;
 
-    </script>
+        const countdownInterval = setInterval(() => {
+            countdownElement.textContent = 'Starting in: ' + counter;
+            counter--;
+
+            if (counter < 0) {
+                clearInterval(countdownInterval);
+                countdownElement.textContent = '';
+                callback();
+            }
+        }, 1000);
+    }
+
+    function enableContinueButton() {
+        document.getElementById('continuePractice').disabled = false;
+    }
+
+    document.getElementById('startPractice').addEventListener('click', function () {
+        document.getElementById('continuePrompt').textContent = '';
+        document.getElementById('continuePractice').style.display = 'none';
+        document.getElementById('userResponse').textContent = '';
+        document.getElementById('feedback').textContent = '';
+        startPractice();
+    });
+
+    document.getElementById('continuePractice').addEventListener('click', function () {
+        document.getElementById('continuePrompt').textContent = '';
+        document.getElementById('continuePractice').style.display = 'none';
+        document.getElementById('userResponse').textContent = '';
+        document.getElementById('feedback').textContent = '';
+        startPractice();
+    });
+</script>
+
  
 </div>
 
