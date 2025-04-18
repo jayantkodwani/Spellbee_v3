@@ -1,28 +1,42 @@
-from flask import Flask, render_template, jsonify
-import random
+from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
+import whisper
+import os
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+CORS(app)
 
-# List of words for the spelling bee practice
-word_list = ["ship", "gems", "tank","egg","escalator","lion","apple","speech","trophy","dubai","triumph","television","phone","mobile","toy","tower","car","bike","hut","school","cycle","cat","tiger","play","plant","google","block","pizza","burger","tea","glass","wood","lamp","lego","cop","book","pen","blanket","puzzle"]
+UPLOAD_FOLDER = 'uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Route to serve the web page
+model = whisper.load_model("base")
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# Route to get a random word
 @app.route('/get_word')
 def get_word():
-    word = random.choice(word_list)
-    return jsonify({"word": word})
+    import random
+    word_list = ["ship", "gems", "tank","egg","escalator","lion","apple","speech","trophy","dubai","triumph","television","phone","mobile","toy","tower","car","bike","hut","school","cycle","cat","tiger","play","plant","google","block","pizza","burger","tea","glass","wood","lamp","lego","cop","book","pen","blanket","puzzle"]
+    
+    return jsonify({"word": random.choice(word_list)})
+
+@app.route('/transcribe', methods=['POST'])
+def transcribe():
+    if 'audio' not in request.files:
+        return jsonify({'error': 'No audio file'}), 400
+
+    file = request.files['audio']
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+
+    result = model.transcribe(filepath)
+    os.remove(filepath)
+
+    return jsonify({'transcription': result['text']})
 
 if __name__ == '__main__':
     app.run(debug=True)
-    
-#if __name__ == '__main__':
-    # Bind to all interfaces (0.0.0.0) and use the port defined in the environment variable, default to 8000
- #   import os
-    #port = int(os.environ.get('PORT', 8000))
-  #  app.run()
-    #app.run(host='0.0.0.0', port=port)
