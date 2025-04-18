@@ -115,3 +115,10 @@ wcwidth==0.2.6
 webdriver-manager==3.8.3
 Werkzeug==3.0.4
 wsproto==1.2.0
+Flask
+flask-cors
+whisper
+torch
+pydub
+werkzeug
+
