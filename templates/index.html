@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GNMS Spelling Bee AI Bot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">    
+</head>
+
+
+<body>
+    <!-- Add a decorative image to the top of the page -->
+    <img src="static/spellbee.jpg" alt="Decorative Image" class="decorative-image">
+ <style>
+        .decorative-image {
+            display: block;
+            margin: 5px auto;
+           
+            height: auto; /* Maintain aspect ratio */
+            max-width: 90%; /* Make sure it doesn't exceed container width */
+            border-radius: 10px; /* Slightly round the corners */
+            
+        }
+
+
+ </style>
+
+ <div class="content-container">
+
+
+    <h1 align="center">Welcome to GNMS Spell Bee AI Bot</h1>
+
+
+
+
+            <button id="startPractice">Start Practice</button>
+
+
+    <p id="wordPrompt"></p>
+    <p id="countdown"></p>
+    <p id="userResponse"></p>
+    <p id="feedback"></p>
+    <p id="continuePrompt"></p>
+    <button id="continuePractice" style="display:none;" disabled>Continue Practice</button>
+
+    <script>
+        function startPractice() {
+            fetch('/get_word')
+                .then(response => response.json())
+                .then(data => {
+                    const word = data.word;
+                    document.getElementById('wordPrompt').textContent = 'Spell the word:'; // Display prompt only
+
+                    // Use TTS to say the word
+                    const wordUtterance = new SpeechSynthesisUtterance(word);
+                    window.speechSynthesis.speak(wordUtterance);
+
+                    // Start countdown after TTS ends
+                    wordUtterance.onend = () => {
+                        startCountdown(3, () => {
+                            // Speech recognition for user's response
+                            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+                            recognition.lang = 'en-US';
+                            recognition.interimResults = false;
+                            recognition.maxAlternatives = 1;                           
+     // Display a message to prompt the user to speak
+                            document.getElementById('countdown').textContent = 'Please speak now!';
+
+                            recognition.start();
+
+                                recognition.onresult = (event) => {
+                                const userSpelling = event.results[0][0].transcript;
+                                document.getElementById('userResponse').textContent = 'You spelled: ' + userSpelling;
+
+                                // Normalize and compare spelling
+                                const normalizedUserSpelling = userSpelling.replace(/\s+/g, '').trim().toLowerCase().normalize("NFC");
+                                const normalizedWord = word.replace(/\s+/g, '').toLowerCase();
+
+                                let feedbackText;
+                                if (normalizedUserSpelling === normalizedWord) {
+                                    feedbackText = 'Correct! Its '+ word;
+                                    document.getElementById('feedback').textContent = feedbackText
+                                    const feedbackUtterance = new SpeechSynthesisUtterance(feedbackText);
+                                    feedbackUtterance.onend = enableContinueButton;
+                                    window.speechSynthesis.speak(feedbackUtterance);
+                                } else {
+                                    feedbackText = 'Incorrect. The correct spelling is ';
+                                    document.getElementById('feedback').textContent = feedbackText + word;
+
+                                    // Spell out each letter, then say the word
+                                    spellOutAndSayWord(word, enableContinueButton);
+                                }
+
+                                // Ask if the user wants to continue
+                                document.getElementById('continuePrompt').textContent = 'Would you like to continue the practice?';
+                                document.getElementById('continuePractice').style.display = 'inline';
+                                document.getElementById('continuePractice').disabled = true; // Initially disable
+                            };
+
+                            // Stop recognition when speech ends
+                            recognition.onspeechend = () => {
+                                recognition.stop();
+                            };
+
+                            recognition.onerror = (event) => {
+                                document.getElementById('feedback').textContent = 'Error occurred in recognition: ' + event.error;
+                            };
+                        });
+                    };
+                });
+        }
+
+        // Function to spell out each letter of the word, then say the whole word
+        function spellOutAndSayWord(word, callback) {
+            const letters = word.split('');
+            const utteranceQueue = [];
+
+            // Create a TTS utterance for each letter
+            letters.forEach(letter => {
+                utteranceQueue.push(new SpeechSynthesisUtterance(letter));
+            });
+
+            // Create a TTS utterance for the whole word
+            const wordUtterance = new SpeechSynthesisUtterance('The word is ' + word);
+            utteranceQueue.push(wordUtterance);
+
+            // Speak each utterance in sequence
+            let currentIndex = 0;
+            const speakNext = () => {
+                if (currentIndex < utteranceQueue.length) {
+                    const utterance = utteranceQueue[currentIndex];
+                    window.speechSynthesis.speak(utterance);
+                    utterance.onend = () => {
+                        currentIndex++;
+                        speakNext();
+                    };
+                } else {
+                    callback(); // Callback after all utterances have been spoken
+                }
+            };
+            speakNext();
+        }
+
+        // Function to enable the Continue Practice button
+        function enableContinueButton() {
+            document.getElementById('continuePractice').disabled = false;
+        }
+
+        // Countdown function
+        function startCountdown(seconds, callback) {
+            const countdownElement = document.getElementById('countdown');
+            let counter = seconds;
+
+            const countdownInterval = setInterval(() => {
+                countdownElement.textContent = 'Starting in: ' + counter;
+                counter--;
+
+                if (counter < 0) {
+                    clearInterval(countdownInterval);
+                    countdownElement.textContent = ''; // Clear countdown
+                    callback(); // Call the callback function to start recognition
+                }
+            }, 1000);
+        }
+
+        document.getElementById('startPractice').addEventListener('click', function() {
+            document.getElementById('continuePrompt').textContent = '';
+            document.getElementById('continuePractice').style.display = 'none';
+            document.getElementById('userResponse').textContent = ''; // Clear previous response
+            document.getElementById('feedback').textContent = ''; // Clear previous feedback
+            startPractice();
+        });
+
+        document.getElementById('continuePractice').addEventListener('click', function() {
+            document.getElementById('continuePrompt').textContent = '';
+            document.getElementById('continuePractice').style.display = 'none';
+            document.getElementById('userResponse').textContent = ''; // Clear previous response
+            document.getElementById('feedback').textContent = ''; // Clear previous feedback
+            startPractice();
+        });
+
+               
+
+
+    </script>
+ 
+</div>
+
+
+</body>
+
+<p id="p2">
+ 1.Click on <b> "Start Practice Button". </b> <br>
+ 2.You will be prompted with a random word to spell by the GNMS AI bot. <br>
+ 3.You will get 3 seconds countdown to prepare to spell the given word. <br>
+ 4.Spell the word when microphone blinks. <br>
+ 5.The <b> GNMS AI bot </b> will automatically evaluate the response & will provide feedback.<br>
+ 6.Click <b>"Continue Practice" </b> button for more learning. <b>Happy #SpellBee </b> <br><br>
+
+ <b> Submitted By: Riyansh Kumar Kodwani (Grade-5E) </b>
+ </p>
+
+
+
+</html>
