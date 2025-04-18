@@ -1,0 +1,40 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    padding: 1px;
+   justify-content: center;
+ background-color: lightblue;
+ 
+
+}
+
+button {
+    padding: 20px 20px;
+    font-size: 40px;
+    margin-top: 20px;
+
+}
+
+p {
+    font-size: 22px;
+    margin-top: 3px;
+  
+
+}
+
+#p2 {
+
+            text-align: left;
+            font-size: 15px;   
+            margin-top: 5px;   
+            margin-left: 5%;
+            padding: 1px;
+  }
+
+  .content-container {
+    border: 5px #000; /* Adjust border size, style, and color */
+    margin: 20px; /* Adds space around the border */
+    padding: 20px; /* Adds space between the border and the content */
+    box-sizing: border-box; /* Ensures padding and border are included in the width */
+    border-style: double;
+}
